@@ -14,7 +14,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - lookup_db_data:/var/lib/postgresql/data
+      - lookup_db_data:/var/lib/postgresql
     networks:
       - lookup_network
 
