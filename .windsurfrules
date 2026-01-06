@@ -1,0 +1,75 @@
+# 📜 프로젝트 룩업(LookUp) 개발 지침 (Project Rules)
+
+## 1. 프로젝트 개요
+
+* **서비스명:** 룩업 (LookUp)
+* **핵심 목표:** 플랫폼 독립적인 의류 가격 추적 및 역대 최저가 알림 제공.
+* **플랫폼 확장:** 무신사(1차) → 29cm(2차) → 지그재그 등 지속 확장.
+
+---
+
+## 2. 기술 스택 및 환경 (Tech Stack)
+
+* **언어/런타임:** Python 3.12+ (uv 패키지 매니저 필수 사용)
+* **데이터베이스:** PostgreSQL 16 (Oracle Cloud Infrastructure 내 Docker로 셀프 호스팅)
+* **인프라:** Docker & Docker Compose (Monorepo 구조)
+* **크롤링:** Playwright (브라우저 제어) + BeautifulSoup4 (고속 파싱)
+* **네트워크:** DB 보안을 위해 직접 연결 대신 **SSH 터널링(Port 5432)** 활용.
+
+---
+
+## 3. 프로젝트 구조 (Monorepo)
+
+```text
+lookup/
+├── docker-compose.yml       # 전체 인프라 조립 설명서
+├── .env                     # 환경 변수 (Git 제외)
+├── crawler/                 # Playwright 기반 크롤링 엔진
+├── backend/                 # API 서버 및 DB 마이그레이션 관리 (Alembic/uv)
+├── frontend/                # 웹 서비스 (Flutter/Next.js)
+└── postgres_data/           # DB 데이터 보관 (Git 제외)
+
+```
+
+---
+
+## 4. 데이터베이스 및 스키마 설계 원칙
+
+* **Primary Key:** 모든 테이블의 ID는 **UUID v7**을 사용한다. (성능 및 시간순 정렬 보장)
+* **Unique 제약:** `platform_products` 테이블은 `platform_name`과 `platform_code` 쌍을 유니크 키로 설정한다.
+* **식별자 구분:**
+* `styleNo` (브랜드 품번): 플랫폼 간 동일 상품 매칭을 위한 **글로벌 키**.
+* `goodsNo` (플랫폼 품번): 각 사이트(무신사 등) 접속을 위한 **입장권**.
+
+
+* **마이그레이션:** DB 스키마 변경은 `backend` 서비스에서 컨테이너 실행 시점(Runtime)에 수행한다.
+
+---
+
+## 5. 크롤링 및 데이터 수집 전략 (Pipeline)
+
+* **3단계 계층 구조:**
+1. **Root Producer:** 카테고리/브랜드 목록 탐색 → `rank_crawl` 티켓 생성.
+2. **Semi-Producer:** 랭킹 페이지 탐색 → 상품별 `detail_update` 티켓 생성.
+3. **Consumer (Worker):** 상세 페이지 파싱 → 최종 데이터(Price/Metadata) DB 적재.
+
+
+* **작업 큐(Queue):** `crawl_jobs` 테이블의 `status`(`pending`, `processing`, `completed`, `failed`)를 통해 상태 관리.
+* **지연된 업데이트(Lazy Update):** 상세 정보(Metadata)는 최초 수집 후 7~15일 주기로만 갱신하여 DB 부하 최적화.
+* **데이터 다이어트:** `metadata` 저장 시 SEO 정보, 사이트 설정값 등 불필요한 데이터는 제거하고 1~2KB 내외로 핵심(소재, 태그, 리뷰 등)만 보관.
+
+---
+
+## 6. 개발 및 보안 수칙
+
+* **IP 차단 방지:** 개발 단계에서는 Playwright로 가져온 HTML을 `local.html`로 저장한 뒤 BeautifulSoup4로 오프라인 파싱 로직을 완성한다.
+* **비밀 관리:** 절대 `.env` 파일을 Git에 커밋하지 않으며, `.env.example`을 통해 필요한 환경 변수 목록만 공유한다.
+* **도커 네트워킹:** 컨테이너 간 통신 시 IP 주소가 아닌 서비스 이름(`db`, `backend` 등)을 호스트명으로 사용한다.
+
+---
+
+## 7. AI 코딩 가이드 (for Windsurf)
+
+* 새로운 기능을 구현할 때 항상 `pyproject.toml`의 의존성을 확인하고 `uv add`를 제안하라.
+* DB 쿼리 작성 시 `UPDATE ... RETURNING *` 문법을 사용하여 작업 큐의 원자성(Atomicity)을 확보하라.
+* 모든 코드는 독스링(Docstring)과 타입을 명시하여 가독성을 높인다.
