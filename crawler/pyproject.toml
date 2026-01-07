@@ -1,0 +1,13 @@
+[project]
+name = "lookup-crawler"
+version = "0.1.0"
+description = "LookUp Crawler"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "imagehash>=4.3.2",
+    "playwright>=1.57.0",
+    "pydantic-settings>=2.11.0",
+    "supabase>=2.27.0",
+]
